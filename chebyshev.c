@@ -5,24 +5,24 @@ void perform_carry(ChebCtx *c, int *ind, int *offset, bool *done);
 
 #undef __FUNCT__
 #define __FUNCT__ "MatCreateChebD1"
-PetscErrorCode MatCreateChebD1(MPI_Comm comm, Vec vx, Vec vy, unsigned flag, Mat *A) {
+PetscErrorCode MatCreateChebD1(MPI_Comm comm, Vec vx, Vec vy, unsigned int flag, Mat *A) {
   PetscErrorCode ierr;
   ChebD1Ctx *c;
   int n;
-  double *x, *y;
+  PetscScalar *x, *y;
 
   PetscFunctionBegin;
   ierr = PetscMalloc(sizeof(ChebD1Ctx), &c); CHKERRQ(ierr);
   ierr = VecGetSize(vx, &(c->n)); CHKERRQ(ierr);
   ierr = VecGetSize(vy, &n); CHKERRQ(ierr);
-  if (c->n != n || n < 2) SETERRQ1(PETSC_ERR_USER, "n = %d but must be >= 2", n);
+  if (c->n != n || n < 2) SETERRQ1(PETSC_COMM_WORLD, PETSC_ERR_USER, "n = %d but must be >= 2", n);
 
   c->work = (double *)fftw_malloc(n * sizeof(double));
   ierr = VecGetArray(vx, &x); CHKERRQ(ierr);
   ierr = VecGetArray(vy, &y); CHKERRQ(ierr);
   c->p_forward = fftw_plan_r2r_1d(n, x, c->work, FFTW_REDFT00, flag);
   c->p_backward = fftw_plan_r2r_1d(n-2, c->work + 1, y + 1, FFTW_RODFT00, flag);
-  ierr = VecRestoreArray(vx, &x); CHKERRQ(ierr);
+  ierr = VecRestoreArrayRead(vx, &x); CHKERRQ(ierr);
   ierr = VecRestoreArray(vy, &y); CHKERRQ(ierr);
 
   ierr = MatCreateShell(comm, n, n, n, n, c, A); CHKERRQ(ierr);
@@ -37,15 +37,15 @@ PetscErrorCode MatCreateChebD1(MPI_Comm comm, Vec vx, Vec vy, unsigned flag, Mat
 PetscErrorCode ChebD1Mult(Mat A, Vec vx, Vec vy) {
   PetscErrorCode ierr;
   PetscInt i;
-  double *x, *y;
+  double *x,*y;
   ChebD1Ctx *c;
 
   PetscFunctionBegin;
   ierr = MatShellGetContext(A, (void **)&c); CHKERRQ(ierr);
-  ierr = VecGetArray(vx, &x); CHKERRQ(ierr);
+  ierr = VecGetArrayRead(vx, &x); CHKERRQ(ierr);
   ierr = VecGetArray(vy, &y); CHKERRQ(ierr);
 
-  int n = c->n - 1; // Gauss-Lobatto-Chebyshev points are numbered from [0..n]
+  unsigned int n = c->n - 1; // Gauss-Lobatto-Chebyshev points are numbered from [0..n]
 
   fftw_execute_r2r(c->p_forward, x, c->work);
   for (i = 1; i < n; i++) c->work[i] *= (double)i;
@@ -58,10 +58,10 @@ PetscErrorCode ChebD1Mult(Mat A, Vec vx, Vec vy) {
   y[n] = 0.0;
   double s = 1.0;
   for (i = 1; i < n; i++) {
-    double I = (double)i;
-    y[i] /= 2.0 * n * sqrt(1.0 - PetscSqr(cos(I * pin)));
-    y[0] += I * c->work[i];
-    y[n] += s * I * c->work[i];
+    double II = (double)i;
+    y[i] /= 2.0 * n * sqrt(1.0 - PetscSqr(cos(II * pin)));
+    y[0] += II * c->work[i];
+    y[n] += s * II * c->work[i];
     s = -s;
   }
   y[0] = 0.5 * c->work[n] * N + y[0] / n;
@@ -86,7 +86,7 @@ PetscErrorCode ChebD1Destroy (Mat A) {
 
 #undef __FUNCT__
 #define __FUNCT__ "MatCreateCheb"
-PetscErrorCode MatCreateCheb(MPI_Comm comm, int rank, int tr, int *dim, unsigned flag,
+PetscErrorCode MatCreateCheb(MPI_Comm comm, int rank, int tr, int *dim, unsigned int flag,
                              Vec vx, Vec vy, Mat *A) {
   PetscErrorCode ierr;
   ChebCtx *c;
@@ -95,7 +95,7 @@ PetscErrorCode MatCreateCheb(MPI_Comm comm, int rank, int tr, int *dim, unsigned
 
   PetscFunctionBegin;
   ierr = VecGetSize(vx, &n); CHKERRQ(ierr);
-  if (n < 2) SETERRQ1(PETSC_ERR_USER, "n = %d but must be >= 2", n);
+  if (n < 2) SETERRQ1(PETSC_COMM_WORLD, PETSC_ERR_USER, "n = %d but must be >= 2", n);
 
   ierr = PetscMalloc(sizeof(ChebCtx), &c); CHKERRQ(ierr);
   ierr = PetscMalloc((rank - 1) * sizeof(fftw_iodim), &(c->dim)); CHKERRQ(ierr);
@@ -103,7 +103,7 @@ PetscErrorCode MatCreateCheb(MPI_Comm comm, int rank, int tr, int *dim, unsigned
   c->rank = rank;
   c->tr = tr;
 
-  if (!(0 <= tr && tr < rank)) SETERRQ(PETSC_ERR_USER, "tdim out of range");
+  if (!(0 <= tr && tr < rank)) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_USER, "tdim out of range");
   stride = 1;
   for (r = rank-1, ri=rank-2; r >= 0; r--) {
     fftw_iodim *iod;
@@ -119,7 +119,7 @@ PetscErrorCode MatCreateCheb(MPI_Comm comm, int rank, int tr, int *dim, unsigned
     stride *= dim[r];
   }
 
-  if (n != stride) SETERRQ2(PETSC_ERR_USER, "dimensions do not agree: n = %d but stride = %d", n, stride);
+  if (n != stride) SETERRQ2(PETSC_COMM_WORLD, PETSC_ERR_USER, "dimensions do not agree: n = %d but stride = %d", n, stride);
 
   ierr = VecGetArray(vx, &x); CHKERRQ(ierr);
   ierr = VecGetArray(vy, &y); CHKERRQ(ierr);
@@ -141,14 +141,14 @@ PetscErrorCode MatCreateCheb(MPI_Comm comm, int rank, int tr, int *dim, unsigned
 #define __FUNCT__ "ChebMult"
 PetscErrorCode ChebMult(Mat A, Vec vx, Vec vy) {
   PetscErrorCode ierr;
-  double *x, *y;
+  double *x,*y;
   bool done;
   int i;
   ChebCtx *c;
 
   PetscFunctionBegin;
   ierr = MatShellGetContext(A, (void **)&c); CHKERRQ(ierr);
-  ierr = VecGetArray(vx, &x); CHKERRQ(ierr);
+  ierr = VecGetArrayRead(vx, &x); CHKERRQ(ierr);
   ierr = VecGetArray(vy, &y); CHKERRQ(ierr);
 
   int n = c->tdim.n - 1; // Gauss-Lobatto-Chebyshev points are numbered from [0..n]
@@ -167,10 +167,10 @@ PetscErrorCode ChebMult(Mat A, Vec vx, Vec vy) {
     double s = 1.0;
     for (i = 1; i < n; i++) {
       int ix = offset + i * c->tdim.is;
-      double I = (double)i;
-      c->work[ix] *= I;
-      y[ix0] += I * c->work[ix];
-      y[ixn] += s * I * c->work[ix];
+      double II = (double)i;
+      c->work[ix] *= II;
+      y[ix0] += II * c->work[ix];
+      y[ixn] += s * II * c->work[ix];
       s = -s;
     }
     y[ix0] = 0.5 * c->work[ixn] * N + y[ix0] / n;
@@ -186,13 +186,13 @@ PetscErrorCode ChebMult(Mat A, Vec vx, Vec vy) {
   for (done = false; !done; ) {
     for (i = 1; i < n; i++) {
       int ix = offset + i * c->tdim.is;
-      double I = (double)i;
-      y[ix] /= 2 * n * sqrt(1.0 - PetscSqr(cos(I * pin)));
+      double II = (double)i;
+      y[ix] /= 2 * n * sqrt(1.0 - PetscSqr(cos(II * pin)));
     }
     perform_carry(c, ind, &offset, &done);
   }
 
-  ierr = VecRestoreArray(vx, &x); CHKERRQ(ierr);
+  ierr = VecRestoreArrayRead(vx, &x); CHKERRQ(ierr);
   ierr = VecRestoreArray(vy, &y); CHKERRQ(ierr);
 
   PetscFunctionReturn(0);

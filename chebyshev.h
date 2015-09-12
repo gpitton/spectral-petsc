@@ -25,7 +25,9 @@
 
 
 //PETSC_EXTERN_CXX_BEGIN
+#ifdef __cplusplus
 extern "C" {
+#endif
 
 #define PI 3.14159265358979323846
 
@@ -55,5 +57,7 @@ PetscErrorCode ChebDestroy (Mat A);
 
 
 //PETSC_EXTERN_CXX_END
+#ifdef __cplusplus
 }
+#endif
 #endif // CHEBYSHEV_H

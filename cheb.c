@@ -100,6 +100,7 @@ int main(int argc,char **args)
   ierr = VecNorm(x,NORM_INFINITY,&norm);CHKERRQ(ierr);
   // ierr = KSPGetIterationNumber(ksp,&its);CHKERRQ(ierr);
   //ierr = PetscPrintf(PETSC_COMM_WORLD,"Norm of error %A iterations %D\n",norm,its);CHKERRQ(ierr);
+  // %A is hexadecimal form
   ierr = PetscPrintf(PETSC_COMM_WORLD,"Norm of error %A\n",norm);CHKERRQ(ierr);
 
   ierr = MatMult(A2, u2, b2); CHKERRQ(ierr);
